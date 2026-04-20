@@ -2,43 +2,12 @@
 
 declare(strict_types=1);
 
+namespace Yi\CrmBlueprint\Service;
+
 use Bitrix\Main\Application;
 use Bitrix\Main\Loader;
 
-define('NO_KEEP_STATISTIC', true);
-define('NO_AGENT_STATISTIC', 'Y');
-define('NO_AGENT_CHECK', true);
-define('DisableEventsCheck', true);
-
-function crmBlueprintImporterFindDocumentRoot(): ?string
-{
-    $documentRoot = isset($_SERVER['DOCUMENT_ROOT']) ? trim((string)$_SERVER['DOCUMENT_ROOT']) : '';
-    if ($documentRoot !== '' && is_file($documentRoot . '/bitrix/modules/main/include/prolog_before.php'))
-    {
-        return rtrim($documentRoot, '/');
-    }
-
-    $directory = __DIR__;
-    while ($directory !== '' && $directory !== '/' && $directory !== '.')
-    {
-        if (is_file($directory . '/bitrix/modules/main/include/prolog_before.php'))
-        {
-            return $directory;
-        }
-
-        $parent = dirname($directory);
-        if ($parent === $directory)
-        {
-            break;
-        }
-
-        $directory = $parent;
-    }
-
-    return null;
-}
-
-final class CrmPortalBlueprintImporter
+final class BlueprintImporter
 {
     private const SCHEMA_VERSION = '1.0.0';
 
@@ -124,7 +93,7 @@ final class CrmPortalBlueprintImporter
 
         if (!Loader::includeModule('crm'))
         {
-            throw new RuntimeException('Не удалось подключить модуль crm.');
+            throw new \RuntimeException('Не удалось подключить модуль crm.');
         }
 
         if (!Loader::includeModule('bizproc'))
@@ -134,7 +103,6 @@ final class CrmPortalBlueprintImporter
 
         $this->blueprint = $this->loadBlueprint($inputPath);
         $reportPath = $this->resolveReportPath($options['report'] ?? null);
-
         $this->initializeReport($inputPath, $reportPath);
         $this->importDictionaries();
 
@@ -173,14 +141,9 @@ final class CrmPortalBlueprintImporter
     {
         global $USER;
 
-        if (PHP_SAPI === 'cli')
-        {
-            return;
-        }
-
         if (!is_object($USER) || !method_exists($USER, 'IsAdmin') || !$USER->IsAdmin())
         {
-            throw new RuntimeException('Импорт нужно запускать под администратором портала.');
+            throw new \RuntimeException('Импорт нужно запускать под администратором портала.');
         }
     }
 
@@ -351,8 +314,7 @@ final class CrmPortalBlueprintImporter
 
         if ($entityCode === 'lead')
         {
-            $statuses = (array)($funnels[0]['statuses'] ?? []);
-            $this->importStatuses($entityCode, 0, (string)$definition['status_entity_id'], $statuses);
+            $this->importStatuses($entityCode, 0, (string)$definition['status_entity_id'], (array)($funnels[0]['statuses'] ?? []));
             return;
         }
 
@@ -398,7 +360,7 @@ final class CrmPortalBlueprintImporter
                 }
                 catch (\Throwable $e)
                 {
-                    $this->warnings[] = 'Не удалось обновить название/сортировку дефолтного направления сделок: ' . $e->getMessage();
+                    $this->warnings[] = 'Не удалось обновить дефолтное направление сделок: ' . $e->getMessage();
                 }
             }
 
@@ -406,12 +368,12 @@ final class CrmPortalBlueprintImporter
         }
 
         $existingCategories = $this->getDealCategories();
-
         foreach ($existingCategories as $existingCategory)
         {
             if ($name !== '' && isset($existingCategory['NAME']) && (string)$existingCategory['NAME'] === $name)
             {
                 $targetId = (int)$existingCategory['ID'];
+
                 if ($this->isApplyMode() && class_exists('\\Bitrix\\Crm\\Category\\DealCategory'))
                 {
                     try
@@ -420,7 +382,7 @@ final class CrmPortalBlueprintImporter
                     }
                     catch (\Throwable $e)
                     {
-                        $this->warnings[] = 'Не удалось обновить существующее направление сделок #' . $targetId . ': ' . $e->getMessage();
+                        $this->warnings[] = 'Не удалось обновить существующее направление #' . $targetId . ': ' . $e->getMessage();
                     }
                 }
 
@@ -440,23 +402,16 @@ final class CrmPortalBlueprintImporter
 
         if (!class_exists('\\Bitrix\\Crm\\Category\\DealCategory'))
         {
-            throw new RuntimeException('Класс DealCategory недоступен, нельзя создать направление сделок.');
+            throw new \RuntimeException('Класс DealCategory недоступен, нельзя создать направление сделок.');
         }
 
-        try
-        {
-            $newId = (int)\Bitrix\Crm\Category\DealCategory::add([
-                'NAME' => $name !== '' ? $name : ('Воронка ' . $sourceCategoryId),
-                'SORT' => $sort,
-            ]);
-            \Bitrix\Crm\Category\DealCategory::createDefaultStages($newId);
+        $newId = (int)\Bitrix\Crm\Category\DealCategory::add([
+            'NAME' => $name !== '' ? $name : ('Воронка ' . $sourceCategoryId),
+            'SORT' => $sort,
+        ]);
+        \Bitrix\Crm\Category\DealCategory::createDefaultStages($newId);
 
-            return $newId;
-        }
-        catch (\Throwable $e)
-        {
-            throw new RuntimeException('Не удалось создать направление сделок "' . $name . '": ' . $e->getMessage(), 0, $e);
-        }
+        return $newId;
     }
 
     private function getDealCategories(): array
@@ -465,21 +420,14 @@ final class CrmPortalBlueprintImporter
 
         if (class_exists('\\Bitrix\\Crm\\Category\\DealCategory'))
         {
-            try
-            {
-                $iterator = \Bitrix\Crm\Category\DealCategory::getList([
-                    'select' => ['*'],
-                    'order' => ['SORT' => 'ASC', 'ID' => 'ASC'],
-                ]);
+            $iterator = \Bitrix\Crm\Category\DealCategory::getList([
+                'select' => ['*'],
+                'order' => ['SORT' => 'ASC', 'ID' => 'ASC'],
+            ]);
 
-                while ($row = $iterator->fetch())
-                {
-                    $categories[] = $row;
-                }
-            }
-            catch (\Throwable $e)
+            while ($row = $iterator->fetch())
             {
-                $this->warnings[] = 'Не удалось получить список направлений сделок: ' . $e->getMessage();
+                $categories[] = $row;
             }
         }
 
@@ -518,13 +466,8 @@ final class CrmPortalBlueprintImporter
         return $categoryId > 0 ? 'DEAL_STAGE_' . $categoryId : 'DEAL_STAGE';
     }
 
-    private function importStatuses(
-        string $entityCode,
-        int $targetCategoryId,
-        string $targetStatusEntityId,
-        array $statuses,
-        ?int $sourceCategoryId = null
-    ): void {
+    private function importStatuses(string $entityCode, int $targetCategoryId, string $targetStatusEntityId, array $statuses, ?int $sourceCategoryId = null): void
+    {
         if ($statuses === [])
         {
             return;
@@ -593,7 +536,7 @@ final class CrmPortalBlueprintImporter
             }
             catch (\Throwable $e)
             {
-                $this->warnings[] = 'Не удалось вычислить новый STATUS_ID для стадии ' . $sourceStatusId . ': ' . $e->getMessage();
+                $this->warnings[] = 'Не удалось вычислить STATUS_ID для стадии ' . $sourceStatusId . ': ' . $e->getMessage();
             }
         }
 
@@ -605,8 +548,7 @@ final class CrmPortalBlueprintImporter
         $rows = [];
         $connection = Application::getConnection();
         $helper = $connection->getSqlHelper();
-        $sql = 'SELECT * FROM b_crm_status WHERE ENTITY_ID = \'' . $helper->forSql($entityId) . '\' ORDER BY SORT ASC, STATUS_ID ASC';
-        $recordset = $connection->query($sql);
+        $recordset = $connection->query('SELECT * FROM b_crm_status WHERE ENTITY_ID = \'' . $helper->forSql($entityId) . '\' ORDER BY SORT ASC, STATUS_ID ASC');
 
         while ($row = $recordset->fetch())
         {
@@ -629,12 +571,10 @@ final class CrmPortalBlueprintImporter
         $payload = [];
         foreach ($row as $key => $value)
         {
-            if (!isset($allowed[$key]))
+            if (isset($allowed[$key]))
             {
-                continue;
+                $payload[$key] = $this->applyReplacements($value, $entityCode);
             }
-
-            $payload[$key] = $this->applyReplacements($value, $entityCode);
         }
 
         return $payload;
@@ -698,18 +638,16 @@ final class CrmPortalBlueprintImporter
             }
 
             $this->fieldNameMap[$entityCode][$sourceFieldName] = $targetFieldName;
-
             $payload = $this->sanitizeUserFieldForSave($sourceField, $definition['user_field_entity_id'], $targetFieldName, $entityCode);
 
             if ($this->isApplyMode())
             {
                 $entity = new \CUserTypeEntity();
-
                 if ($action === 'update')
                 {
                     if (!$entity->Update($targetFieldId, $payload))
                     {
-                        throw new RuntimeException('Не удалось обновить пользовательское поле ' . $targetFieldName . ': ' . $this->getApplicationExceptionText());
+                        throw new \RuntimeException('Не удалось обновить пользовательское поле ' . $targetFieldName . ': ' . $this->getApplicationExceptionText());
                     }
                 }
                 else
@@ -717,7 +655,7 @@ final class CrmPortalBlueprintImporter
                     $targetFieldId = (int)$entity->Add($payload);
                     if ($targetFieldId <= 0)
                     {
-                        throw new RuntimeException('Не удалось создать пользовательское поле ' . $targetFieldName . ': ' . $this->getApplicationExceptionText());
+                        throw new \RuntimeException('Не удалось создать пользовательское поле ' . $targetFieldName . ': ' . $this->getApplicationExceptionText());
                     }
                 }
 
@@ -750,11 +688,7 @@ final class CrmPortalBlueprintImporter
             return $rows;
         }
 
-        $iterator = \CUserTypeEntity::GetList(
-            ['SORT' => 'ASC', 'ID' => 'ASC'],
-            ['ENTITY_ID' => $entityId]
-        );
-
+        $iterator = \CUserTypeEntity::GetList(['SORT' => 'ASC', 'ID' => 'ASC'], ['ENTITY_ID' => $entityId]);
         while ($row = $iterator->Fetch())
         {
             $rows[] = $row;
@@ -769,9 +703,7 @@ final class CrmPortalBlueprintImporter
             'ENTITY_ID' => $entityId,
             'FIELD_NAME' => $targetFieldName,
             'USER_TYPE_ID' => (string)($sourceField['USER_TYPE_ID'] ?? 'string'),
-            'XML_ID' => trim((string)($sourceField['XML_ID'] ?? '')) !== ''
-                ? (string)$sourceField['XML_ID']
-                : 'MOVEBX_' . strtoupper($entityCode) . '_' . $sourceField['FIELD_NAME'],
+            'XML_ID' => trim((string)($sourceField['XML_ID'] ?? '')) !== '' ? (string)$sourceField['XML_ID'] : 'MOVEBX_' . strtoupper($entityCode) . '_' . $sourceField['FIELD_NAME'],
             'SORT' => isset($sourceField['SORT']) ? (int)$sourceField['SORT'] : 100,
             'MULTIPLE' => (string)($sourceField['MULTIPLE'] ?? 'N'),
             'MANDATORY' => (string)($sourceField['MANDATORY'] ?? 'N'),
@@ -784,12 +716,10 @@ final class CrmPortalBlueprintImporter
 
         foreach (['EDIT_FORM_LABEL', 'LIST_COLUMN_LABEL', 'LIST_FILTER_LABEL', 'ERROR_MESSAGE', 'HELP_MESSAGE'] as $fieldKey)
         {
-            if (!array_key_exists($fieldKey, $sourceField))
+            if (array_key_exists($fieldKey, $sourceField))
             {
-                continue;
+                $payload[$fieldKey] = $this->normalizeLanguageMap($sourceField[$fieldKey]);
             }
-
-            $payload[$fieldKey] = $this->normalizeLanguageMap($sourceField[$fieldKey]);
         }
 
         return $payload;
@@ -802,9 +732,7 @@ final class CrmPortalBlueprintImporter
             return $value;
         }
 
-        $languageId = defined('LANGUAGE_ID') ? LANGUAGE_ID : 'ru';
-
-        return [$languageId => (string)$value];
+        return [defined('LANGUAGE_ID') ? LANGUAGE_ID : 'ru' => (string)$value];
     }
 
     private function generateUniqueFieldName(string $sourceFieldName, array $existingFields): string
@@ -824,14 +752,8 @@ final class CrmPortalBlueprintImporter
         return $candidate;
     }
 
-    private function syncUserFieldEnumValues(
-        int $targetFieldId,
-        array $sourceEnums,
-        string $entityCode,
-        string $sourceFieldName,
-        string $targetFieldName
-    ): void {
-        $tableName = 'b_user_field_enum';
+    private function syncUserFieldEnumValues(int $targetFieldId, array $sourceEnums, string $entityCode, string $sourceFieldName, string $targetFieldName): void
+    {
         $fieldEnums = $this->getUserFieldEnumRows($targetFieldId);
         $fieldEnumsByXml = [];
         $fieldEnumsByValue = [];
@@ -844,7 +766,6 @@ final class CrmPortalBlueprintImporter
             {
                 $fieldEnumsByXml[$xmlId] = $row;
             }
-
             if ($value !== '')
             {
                 $fieldEnumsByValue[$value] = $row;
@@ -883,7 +804,7 @@ final class CrmPortalBlueprintImporter
             if (is_array($targetEnum))
             {
                 $targetEnumId = (int)$targetEnum['ID'];
-                $this->updateRow($tableName, $targetEnumId, $payload);
+                $this->updateRow('b_user_field_enum', $targetEnumId, $payload);
             }
             else
             {
@@ -895,18 +816,15 @@ final class CrmPortalBlueprintImporter
 
             if ($sourceEnumId > 0 && $sourceEnumId !== $targetEnumId)
             {
-                $this->warnings[] = 'Для поля ' . $targetFieldName . ' значение списка "' . $sourceValue . '" получило новый ID ' . $targetEnumId . ' вместо ' . $sourceEnumId . '. Если шаблоны БП используют именно ID значений списка, проверьте их после импорта.';
+                $this->warnings[] = 'Для поля ' . $targetFieldName . ' значение списка "' . $sourceValue . '" получило новый ID ' . $targetEnumId . ' вместо ' . $sourceEnumId . '.';
             }
         }
     }
 
     private function getUserFieldEnumRows(int $userFieldId): array
     {
-        $connection = Application::getConnection();
-        $sql = 'SELECT * FROM b_user_field_enum WHERE USER_FIELD_ID = ' . $userFieldId . ' ORDER BY SORT ASC, ID ASC';
-        $recordset = $connection->query($sql);
         $rows = [];
-
+        $recordset = Application::getConnection()->query('SELECT * FROM b_user_field_enum WHERE USER_FIELD_ID = ' . $userFieldId . ' ORDER BY SORT ASC, ID ASC');
         while ($row = $recordset->fetch())
         {
             $rows[] = $row;
@@ -917,13 +835,12 @@ final class CrmPortalBlueprintImporter
 
     private function insertUserFieldEnumRow(array $payload, ?int $desiredId = null): int
     {
-        $tableColumns = $this->getTableColumns('b_user_field_enum');
-        $payload = array_intersect_key($payload, array_fill_keys($tableColumns, true));
+        $columns = $this->getTableColumns('b_user_field_enum');
+        $payload = array_intersect_key($payload, array_fill_keys($columns, true));
 
         if ($desiredId !== null && $desiredId > 0 && !$this->rowExistsById('b_user_field_enum', $desiredId))
         {
-            $payloadWithId = ['ID' => $desiredId] + $payload;
-            $this->insertRow('b_user_field_enum', $payloadWithId);
+            $this->insertRow('b_user_field_enum', ['ID' => $desiredId] + $payload);
 
             return $desiredId;
         }
@@ -933,11 +850,7 @@ final class CrmPortalBlueprintImporter
 
     private function rowExistsById(string $tableName, int $id): bool
     {
-        $connection = Application::getConnection();
-        $sql = 'SELECT ID FROM ' . $tableName . ' WHERE ID = ' . $id;
-        $row = $connection->query($sql)->fetch();
-
-        return is_array($row);
+        return is_array(Application::getConnection()->query('SELECT ID FROM ' . $tableName . ' WHERE ID = ' . $id)->fetch());
     }
 
     private function importBusinessProcesses(string $entityCode, array $entityData, array $definition): void
@@ -947,15 +860,13 @@ final class CrmPortalBlueprintImporter
             return;
         }
 
-        $bpData = $entityData['business_processes'] ?? [];
-        $templates = $bpData['templates'] ?? [];
+        $templates = $entityData['business_processes']['templates'] ?? [];
         if (!is_array($templates) || $templates === [])
         {
             return;
         }
 
         $existingTemplates = $this->getExistingBizprocTemplates($definition['document_type']);
-
         foreach ($templates as $template)
         {
             if (!is_array($template))
@@ -967,7 +878,7 @@ final class CrmPortalBlueprintImporter
             {
                 $this->report['entities'][$entityCode]['business_processes']['skipped'][] = [
                     'name' => $template['NAME'] ?? '',
-                    'reason' => 'В blueprint нет сериализованных данных шаблона. Пересоздайте JSON новым экспортёром.',
+                    'reason' => 'В blueprint нет сериализованных данных шаблона.',
                 ];
                 continue;
             }
@@ -998,17 +909,15 @@ final class CrmPortalBlueprintImporter
 
     private function getExistingBizprocTemplates(array $documentType): array
     {
-        $connection = Application::getConnection();
-        $helper = $connection->getSqlHelper();
-        $sql = sprintf(
+        $helper = Application::getConnection()->getSqlHelper();
+        $recordset = Application::getConnection()->query(sprintf(
             "SELECT * FROM b_bp_workflow_template WHERE MODULE_ID = '%s' AND ENTITY = '%s' AND DOCUMENT_TYPE = '%s' ORDER BY ID ASC",
             $helper->forSql((string)$documentType[0]),
             $helper->forSql((string)$documentType[1]),
             $helper->forSql((string)$documentType[2])
-        );
+        ));
 
         $rows = [];
-        $recordset = $connection->query($sql);
         while ($row = $recordset->fetch())
         {
             $rows[] = $row;
@@ -1025,8 +934,7 @@ final class CrmPortalBlueprintImporter
 
         foreach ($existingTemplates as $existingTemplate)
         {
-            $existingSystemCode = trim((string)($existingTemplate['SYSTEM_CODE'] ?? ''));
-            if ($systemCode !== '' && $existingSystemCode === $systemCode)
+            if ($systemCode !== '' && trim((string)($existingTemplate['SYSTEM_CODE'] ?? '')) === $systemCode)
             {
                 return $existingTemplate;
             }
@@ -1034,8 +942,7 @@ final class CrmPortalBlueprintImporter
 
         foreach ($existingTemplates as $existingTemplate)
         {
-            if ((string)($existingTemplate['NAME'] ?? '') === $name
-                && (string)($existingTemplate['AUTO_EXECUTE'] ?? '0') === $autoExecute)
+            if ((string)($existingTemplate['NAME'] ?? '') === $name && (string)($existingTemplate['AUTO_EXECUTE'] ?? '0') === $autoExecute)
             {
                 return $existingTemplate;
             }
@@ -1050,7 +957,6 @@ final class CrmPortalBlueprintImporter
         $allowed = array_fill_keys($columns, true);
 
         unset($template['ID']);
-
         $template['MODULE_ID'] = (string)$documentType[0];
         $template['ENTITY'] = (string)$documentType[1];
         $template['DOCUMENT_TYPE'] = (string)$documentType[2];
@@ -1061,12 +967,10 @@ final class CrmPortalBlueprintImporter
         $payload = [];
         foreach ($template as $key => $value)
         {
-            if (!isset($allowed[$key]))
+            if (isset($allowed[$key]))
             {
-                continue;
+                $payload[$key] = is_array($value) ? serialize($value) : $value;
             }
-
-            $payload[$key] = is_array($value) ? serialize($value) : $value;
         }
 
         return $payload;
@@ -1080,19 +984,8 @@ final class CrmPortalBlueprintImporter
             return;
         }
 
-        $this->importAutomationTableRows(
-            $entityCode,
-            'robots',
-            (array)(($automation['robots']['raw'] ?? [])),
-            $this->resolveAutomationTableName('template')
-        );
-
-        $this->importAutomationTableRows(
-            $entityCode,
-            'triggers',
-            (array)(($automation['triggers']['raw'] ?? [])),
-            $this->resolveAutomationTableName('trigger')
-        );
+        $this->importAutomationTableRows($entityCode, 'robots', (array)($automation['robots']['raw'] ?? []), $this->resolveAutomationTableName('template'));
+        $this->importAutomationTableRows($entityCode, 'triggers', (array)($automation['triggers']['raw'] ?? []), $this->resolveAutomationTableName('trigger'));
     }
 
     private function resolveAutomationTableName(string $kind): ?string
@@ -1125,7 +1018,6 @@ final class CrmPortalBlueprintImporter
         }
 
         $entityTypeId = (int)self::ENTITY_MAP[$entityCode]['entity_type_id'];
-
         if ($this->isApplyMode() && $this->getOptionBool('replace_automation', true))
         {
             $this->deleteByFilter($tableName, 'ENTITY_TYPE_ID = ' . $entityTypeId);
@@ -1180,15 +1072,13 @@ final class CrmPortalBlueprintImporter
 
         foreach (['DOCUMENT_STATUS', 'STATUS_ID', 'STAGE_ID', 'DOCUMENT_STATUS_ID', 'TRIGGER_STATUS'] as $statusField)
         {
-            if (!isset($row[$statusField]) || !is_scalar($row[$statusField]))
+            if (isset($row[$statusField]) && is_scalar($row[$statusField]))
             {
-                continue;
-            }
-
-            $sourceStatusId = (string)$row[$statusField];
-            if (isset($this->stageMap[$entityCode][$sourceStatusId]))
-            {
-                $row[$statusField] = $this->stageMap[$entityCode][$sourceStatusId];
+                $sourceStatusId = (string)$row[$statusField];
+                if (isset($this->stageMap[$entityCode][$sourceStatusId]))
+                {
+                    $row[$statusField] = $this->stageMap[$entityCode][$sourceStatusId];
+                }
             }
         }
 
@@ -1196,12 +1086,10 @@ final class CrmPortalBlueprintImporter
         $allowed = array_fill_keys($columns, true);
         foreach ($row as $key => $value)
         {
-            if (!isset($allowed[$key]))
+            if (isset($allowed[$key]))
             {
-                continue;
+                $payload[$key] = is_array($value) ? serialize($value) : $value;
             }
-
-            $payload[$key] = is_array($value) ? serialize($value) : $value;
         }
 
         return $payload;
@@ -1244,13 +1132,12 @@ final class CrmPortalBlueprintImporter
         foreach (array_keys($map) as $from)
         {
             $to = $map[$from];
-            if ($from === $to || $from === '')
+            if ($from === '' || $from === $to)
             {
                 continue;
             }
 
-            $pattern = '/(?<![A-Z0-9_])' . preg_quote($from, '/') . '(?![A-Z0-9_])/u';
-            $value = preg_replace($pattern, $to, $value) ?? $value;
+            $value = preg_replace('/(?<![A-Z0-9_])' . preg_quote($from, '/') . '(?![A-Z0-9_])/u', $to, $value) ?? $value;
         }
 
         return $value;
@@ -1303,8 +1190,7 @@ final class CrmPortalBlueprintImporter
         $columns = [];
         try
         {
-            $connection = Application::getConnection();
-            $recordset = $connection->query('SHOW COLUMNS FROM ' . $tableName);
+            $recordset = Application::getConnection()->query('SHOW COLUMNS FROM ' . $tableName);
             while ($row = $recordset->fetch())
             {
                 $columns[] = (string)$row['Field'];
@@ -1323,10 +1209,8 @@ final class CrmPortalBlueprintImporter
     private function insertRow(string $tableName, array $payload): int
     {
         $connection = Application::getConnection();
-        $helper = $connection->getSqlHelper();
-        [$fields, $values] = $helper->prepareInsert($tableName, $payload);
-        $sql = 'INSERT INTO ' . $tableName . ' (' . $fields . ') VALUES (' . $values . ')';
-        $connection->queryExecute($sql);
+        [$fields, $values] = $connection->getSqlHelper()->prepareInsert($tableName, $payload);
+        $connection->queryExecute('INSERT INTO ' . $tableName . ' (' . $fields . ') VALUES (' . $values . ')');
 
         return (int)$connection->getInsertedId();
     }
@@ -1334,16 +1218,13 @@ final class CrmPortalBlueprintImporter
     private function updateRow(string $tableName, int $id, array $payload): void
     {
         $connection = Application::getConnection();
-        $helper = $connection->getSqlHelper();
-        $update = $helper->prepareUpdate($tableName, $payload);
-        $sql = 'UPDATE ' . $tableName . ' SET ' . $update . ' WHERE ID = ' . $id;
-        $connection->queryExecute($sql);
+        $update = $connection->getSqlHelper()->prepareUpdate($tableName, $payload);
+        $connection->queryExecute('UPDATE ' . $tableName . ' SET ' . $update . ' WHERE ID = ' . $id);
     }
 
     private function deleteByFilter(string $tableName, string $whereSql): void
     {
-        $connection = Application::getConnection();
-        $connection->queryExecute('DELETE FROM ' . $tableName . ' WHERE ' . $whereSql);
+        Application::getConnection()->queryExecute('DELETE FROM ' . $tableName . ' WHERE ' . $whereSql);
     }
 
     private function getApplicationExceptionText(): string
@@ -1366,19 +1247,19 @@ final class CrmPortalBlueprintImporter
     {
         if (!is_file($inputPath))
         {
-            throw new RuntimeException('Файл blueprint не найден: ' . $inputPath);
+            throw new \RuntimeException('Файл blueprint не найден: ' . $inputPath);
         }
 
         $contents = file_get_contents($inputPath);
         if (!is_string($contents) || $contents === '')
         {
-            throw new RuntimeException('Не удалось прочитать blueprint: ' . $inputPath);
+            throw new \RuntimeException('Не удалось прочитать blueprint: ' . $inputPath);
         }
 
         $data = json_decode($contents, true);
         if (!is_array($data))
         {
-            throw new RuntimeException('JSON blueprint некорректен: ' . json_last_error_msg());
+            throw new \RuntimeException('JSON blueprint некорректен: ' . json_last_error_msg());
         }
 
         return $data;
@@ -1389,10 +1270,10 @@ final class CrmPortalBlueprintImporter
         $requestedPath = trim((string)$requestedPath);
         if ($requestedPath === '')
         {
-            $baseDirectory = rtrim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''), '/') . '/upload/crm_blueprints';
+            $baseDirectory = rtrim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''), '/') . '/upload/yi.crmblueprint/reports';
             if (!is_dir($baseDirectory) && !mkdir($baseDirectory, 0775, true) && !is_dir($baseDirectory))
             {
-                throw new RuntimeException('Не удалось создать каталог для отчета: ' . $baseDirectory);
+                throw new \RuntimeException('Не удалось создать каталог отчета: ' . $baseDirectory);
             }
 
             return $baseDirectory . '/crm-blueprint-import-report-' . date('Y-m-d-H-i-s') . '.json';
@@ -1406,7 +1287,7 @@ final class CrmPortalBlueprintImporter
         $directory = dirname($requestedPath);
         if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory))
         {
-            throw new RuntimeException('Не удалось создать каталог отчета: ' . $directory);
+            throw new \RuntimeException('Не удалось создать каталог отчета: ' . $directory);
         }
 
         return $requestedPath;
@@ -1414,19 +1295,15 @@ final class CrmPortalBlueprintImporter
 
     private function saveJson(string $outputPath, array $data): void
     {
-        $json = json_encode(
-            $data,
-            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_INVALID_UTF8_SUBSTITUTE
-        );
-
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_INVALID_UTF8_SUBSTITUTE);
         if (!is_string($json))
         {
-            throw new RuntimeException('json_encode завершился ошибкой: ' . json_last_error_msg());
+            throw new \RuntimeException('json_encode завершился ошибкой: ' . json_last_error_msg());
         }
 
         if (file_put_contents($outputPath, $json) === false)
         {
-            throw new RuntimeException('Не удалось записать отчет: ' . $outputPath);
+            throw new \RuntimeException('Не удалось записать отчет: ' . $outputPath);
         }
     }
 
@@ -1450,117 +1327,4 @@ final class CrmPortalBlueprintImporter
 
         return in_array(strtolower((string)$value), ['1', 'y', 'yes', 'true'], true);
     }
-}
-
-function crmBlueprintImporterCollectOptions(): array
-{
-    $options = [
-        'mode' => 'dry-run',
-        'replace_automation' => true,
-        'input' => null,
-        'report' => null,
-    ];
-
-    if (PHP_SAPI === 'cli')
-    {
-        global $argv;
-
-        if (is_array($argv))
-        {
-            foreach ($argv as $argument)
-            {
-                if (strpos((string)$argument, '--input=') === 0)
-                {
-                    $options['input'] = substr((string)$argument, 8);
-                }
-                elseif (strpos((string)$argument, '--report=') === 0)
-                {
-                    $options['report'] = substr((string)$argument, 9);
-                }
-                elseif (strpos((string)$argument, '--mode=') === 0)
-                {
-                    $options['mode'] = substr((string)$argument, 7);
-                }
-                elseif (strpos((string)$argument, '--replace-automation=') === 0)
-                {
-                    $options['replace_automation'] = substr((string)$argument, 21);
-                }
-            }
-        }
-
-        return $options;
-    }
-
-    if (isset($_REQUEST['input']))
-    {
-        $options['input'] = (string)$_REQUEST['input'];
-    }
-
-    if (isset($_REQUEST['report']))
-    {
-        $options['report'] = (string)$_REQUEST['report'];
-    }
-
-    if (isset($_REQUEST['mode']))
-    {
-        $options['mode'] = (string)$_REQUEST['mode'];
-    }
-
-    if (isset($_REQUEST['replace_automation']))
-    {
-        $options['replace_automation'] = (string)$_REQUEST['replace_automation'];
-    }
-
-    return $options;
-}
-
-function crmBlueprintImporterRespond(array $payload, int $statusCode = 200): void
-{
-    if (PHP_SAPI !== 'cli' && !headers_sent())
-    {
-        http_response_code($statusCode);
-        header('Content-Type: application/json; charset=UTF-8');
-    }
-
-    echo json_encode(
-        $payload,
-        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_INVALID_UTF8_SUBSTITUTE
-    );
-}
-
-try
-{
-    $documentRoot = crmBlueprintImporterFindDocumentRoot();
-    if ($documentRoot === null)
-    {
-        throw new RuntimeException('Не найден /bitrix/modules/main/include/prolog_before.php. Скрипт должен запускаться внутри коробочного Битрикс24.');
-    }
-
-    $_SERVER['DOCUMENT_ROOT'] = $documentRoot;
-    require_once $documentRoot . '/bitrix/modules/main/include/prolog_before.php';
-
-    $options = crmBlueprintImporterCollectOptions();
-    $inputPath = trim((string)($options['input'] ?? ''));
-    if ($inputPath === '')
-    {
-        throw new RuntimeException('Нужно передать путь к blueprint JSON через --input=... или ?input=...');
-    }
-
-    if ($inputPath[0] !== '/')
-    {
-        $inputPath = rtrim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''), '/') . '/' . ltrim($inputPath, '/');
-    }
-
-    $importer = new CrmPortalBlueprintImporter();
-    $result = $importer->import($inputPath, $options);
-    crmBlueprintImporterRespond($result);
-}
-catch (\Throwable $e)
-{
-    crmBlueprintImporterRespond([
-        'success' => false,
-        'error' => $e->getMessage(),
-        'file' => $e->getFile(),
-        'line' => $e->getLine(),
-    ], 500);
 }

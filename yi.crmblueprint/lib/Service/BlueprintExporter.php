@@ -2,43 +2,12 @@
 
 declare(strict_types=1);
 
+namespace Yi\CrmBlueprint\Service;
+
 use Bitrix\Main\Application;
 use Bitrix\Main\Loader;
 
-define('NO_KEEP_STATISTIC', true);
-define('NO_AGENT_STATISTIC', 'Y');
-define('NO_AGENT_CHECK', true);
-define('DisableEventsCheck', true);
-
-function crmBlueprintExporterFindDocumentRoot(): ?string
-{
-    $documentRoot = isset($_SERVER['DOCUMENT_ROOT']) ? trim((string)$_SERVER['DOCUMENT_ROOT']) : '';
-    if ($documentRoot !== '' && is_file($documentRoot . '/bitrix/modules/main/include/prolog_before.php'))
-    {
-        return rtrim($documentRoot, '/');
-    }
-
-    $directory = __DIR__;
-    while ($directory !== '' && $directory !== '/' && $directory !== '.')
-    {
-        if (is_file($directory . '/bitrix/modules/main/include/prolog_before.php'))
-        {
-            return $directory;
-        }
-
-        $parent = dirname($directory);
-        if ($parent === $directory)
-        {
-            break;
-        }
-
-        $directory = $parent;
-    }
-
-    return null;
-}
-
-final class CrmPortalBlueprintExporter
+final class BlueprintExporter
 {
     private const SCHEMA_VERSION = '1.0.0';
 
@@ -50,7 +19,6 @@ final class CrmPortalBlueprintExporter
             'document_type' => ['crm', 'CCrmDocumentLead', 'LEAD'],
             'status_entity_id' => 'STATUS',
             'has_funnels' => true,
-            'has_categories' => false,
         ],
         'deal' => [
             'title' => 'Сделка',
@@ -59,7 +27,6 @@ final class CrmPortalBlueprintExporter
             'document_type' => ['crm', 'CCrmDocumentDeal', 'DEAL'],
             'status_entity_id' => 'DEAL_STAGE',
             'has_funnels' => true,
-            'has_categories' => true,
         ],
         'contact' => [
             'title' => 'Контакт',
@@ -68,7 +35,6 @@ final class CrmPortalBlueprintExporter
             'document_type' => ['crm', 'CCrmDocumentContact', 'CONTACT'],
             'status_entity_id' => null,
             'has_funnels' => false,
-            'has_categories' => false,
         ],
         'company' => [
             'title' => 'Компания',
@@ -77,7 +43,6 @@ final class CrmPortalBlueprintExporter
             'document_type' => ['crm', 'CCrmDocumentCompany', 'COMPANY'],
             'status_entity_id' => null,
             'has_funnels' => false,
-            'has_categories' => false,
         ],
     ];
 
@@ -109,7 +74,6 @@ final class CrmPortalBlueprintExporter
     ];
 
     private array $warnings = [];
-    private array $runtime = [];
 
     public function export(?string $requestedOutputPath = null): array
     {
@@ -122,7 +86,7 @@ final class CrmPortalBlueprintExporter
 
         if (!$modules['crm'])
         {
-            throw new RuntimeException('Не удалось подключить модуль crm.');
+            throw new \RuntimeException('Не удалось подключить модуль crm.');
         }
 
         $outputPath = $this->resolveOutputPath($requestedOutputPath);
@@ -156,14 +120,9 @@ final class CrmPortalBlueprintExporter
     {
         global $USER;
 
-        if (PHP_SAPI === 'cli')
-        {
-            return;
-        }
-
         if (!is_object($USER) || !method_exists($USER, 'IsAdmin') || !$USER->IsAdmin())
         {
-            throw new RuntimeException('Скрипт нужно запускать под администратором портала, иначе часть настроек может не выгрузиться.');
+            throw new \RuntimeException('Экспорт нужно запускать под администратором портала.');
         }
     }
 
@@ -234,15 +193,13 @@ final class CrmPortalBlueprintExporter
     {
         if ($entityCode === 'lead')
         {
-            return [
-                [
-                    'id' => 0,
-                    'name' => 'Лиды',
-                    'is_default' => true,
-                    'status_entity_id' => (string)$definition['status_entity_id'],
-                    'statuses' => $this->getCrmStatuses((string)$definition['status_entity_id']),
-                ],
-            ];
+            return [[
+                'id' => 0,
+                'name' => 'Лиды',
+                'is_default' => true,
+                'status_entity_id' => (string)$definition['status_entity_id'],
+                'statuses' => $this->getCrmStatuses((string)$definition['status_entity_id']),
+            ]];
         }
 
         if ($entityCode !== 'deal')
@@ -373,12 +330,7 @@ final class CrmPortalBlueprintExporter
             $row[$field] = $this->normalizeValue($value);
         }
 
-        if (!isset($row['ID']))
-        {
-            return [];
-        }
-
-        return $row;
+        return isset($row['ID']) ? $row : [];
     }
 
     private function getCrmStatuses(string $statusEntityId): array
@@ -604,7 +556,7 @@ final class CrmPortalBlueprintExporter
             ],
             'notes' => $entityCode === 'deal' || $entityCode === 'lead'
                 ? []
-                : ['Триггеры в CRM официально относятся прежде всего к лидам и сделкам; для контактов и компаний секция может оказаться пустой на части версий коробки.'],
+                : ['Триггеры в CRM официально относятся прежде всего к лидам и сделкам; для контактов и компаний секция может оказаться пустой.'],
         ];
     }
 
@@ -642,9 +594,7 @@ final class CrmPortalBlueprintExporter
         {
             $tableName = method_exists($className, 'getTableName') ? (string)$className::getTableName() : 'b_crm_automation_template';
             $connection = Application::getConnection();
-            $sql = 'SELECT * FROM ' . $tableName . ' WHERE ENTITY_TYPE_ID = ' . (int)$entityTypeId . ' ORDER BY ID ASC';
-            $recordset = $connection->query($sql);
-
+            $recordset = $connection->query('SELECT * FROM ' . $tableName . ' WHERE ENTITY_TYPE_ID = ' . $entityTypeId . ' ORDER BY ID ASC');
             while ($row = $recordset->fetch())
             {
                 $rows[] = $this->normalizeAutomationTemplateRow($row);
@@ -718,9 +668,7 @@ final class CrmPortalBlueprintExporter
         {
             $tableName = method_exists($className, 'getTableName') ? (string)$className::getTableName() : 'b_crm_automation_trigger';
             $connection = Application::getConnection();
-            $sql = 'SELECT * FROM ' . $tableName . ' WHERE ENTITY_TYPE_ID = ' . (int)$entityTypeId . ' ORDER BY ID ASC';
-            $recordset = $connection->query($sql);
-
+            $recordset = $connection->query('SELECT * FROM ' . $tableName . ' WHERE ENTITY_TYPE_ID = ' . $entityTypeId . ' ORDER BY ID ASC');
             while ($row = $recordset->fetch())
             {
                 $rows[] = $this->normalizeValue($row);
@@ -742,19 +690,8 @@ final class CrmPortalBlueprintExporter
 
         foreach ($rows as $row)
         {
-            $stageKey = $this->findFirstFilledValue($row, [
-                'DOCUMENT_STATUS',
-                'STATUS_ID',
-                'STAGE_ID',
-                'DOCUMENT_STATUS_ID',
-                'TRIGGER_STATUS',
-            ]);
-
-            $categoryKey = $this->findFirstFilledValue($row, [
-                'CATEGORY_ID',
-                'CATEGORY',
-            ]);
-
+            $stageKey = $this->findFirstFilledValue($row, ['DOCUMENT_STATUS', 'STATUS_ID', 'STAGE_ID', 'DOCUMENT_STATUS_ID', 'TRIGGER_STATUS']);
+            $categoryKey = $this->findFirstFilledValue($row, ['CATEGORY_ID', 'CATEGORY']);
             $groupKey = ($categoryKey !== null ? 'category:' . $categoryKey . '|' : '') . 'stage:' . ($stageKey ?? '__UNKNOWN__');
             $grouped[$groupKey][] = $row;
         }
@@ -793,10 +730,10 @@ final class CrmPortalBlueprintExporter
         $requestedOutputPath = trim((string)$requestedOutputPath);
         if ($requestedOutputPath === '')
         {
-            $baseDirectory = rtrim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''), '/') . '/upload/crm_blueprints';
+            $baseDirectory = rtrim((string)($_SERVER['DOCUMENT_ROOT'] ?? ''), '/') . '/upload/yi.crmblueprint/exports';
             if (!is_dir($baseDirectory) && !mkdir($baseDirectory, 0775, true) && !is_dir($baseDirectory))
             {
-                throw new RuntimeException('Не удалось создать каталог для выгрузки: ' . $baseDirectory);
+                throw new \RuntimeException('Не удалось создать каталог для выгрузки: ' . $baseDirectory);
             }
 
             return $baseDirectory . '/crm-blueprint-' . date('Y-m-d-H-i-s') . '.json';
@@ -810,7 +747,7 @@ final class CrmPortalBlueprintExporter
         $directory = dirname($requestedOutputPath);
         if (!is_dir($directory) && !mkdir($directory, 0775, true) && !is_dir($directory))
         {
-            throw new RuntimeException('Не удалось создать каталог назначения: ' . $directory);
+            throw new \RuntimeException('Не удалось создать каталог назначения: ' . $directory);
         }
 
         return $requestedOutputPath;
@@ -818,20 +755,15 @@ final class CrmPortalBlueprintExporter
 
     private function saveJson(string $outputPath, array $data): void
     {
-        $json = json_encode(
-            $data,
-            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_INVALID_UTF8_SUBSTITUTE
-        );
-
+        $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_INVALID_UTF8_SUBSTITUTE);
         if (!is_string($json))
         {
-            throw new RuntimeException('json_encode завершился ошибкой: ' . json_last_error_msg());
+            throw new \RuntimeException('json_encode завершился ошибкой: ' . json_last_error_msg());
         }
 
-        $bytes = file_put_contents($outputPath, $json);
-        if ($bytes === false)
+        if (file_put_contents($outputPath, $json) === false)
         {
-            throw new RuntimeException('Не удалось записать файл: ' . $outputPath);
+            throw new \RuntimeException('Не удалось записать файл: ' . $outputPath);
         }
     }
 
@@ -870,68 +802,4 @@ final class CrmPortalBlueprintExporter
 
         return $value;
     }
-}
-
-function crmBlueprintExporterResolveRequestedOutputPath(): ?string
-{
-    if (PHP_SAPI === 'cli')
-    {
-        global $argv;
-
-        if (!is_array($argv))
-        {
-            return null;
-        }
-
-        foreach ($argv as $argument)
-        {
-            if (strpos((string)$argument, '--output=') === 0)
-            {
-                return substr((string)$argument, 9);
-            }
-        }
-
-        return null;
-    }
-
-    return isset($_REQUEST['output']) ? (string)$_REQUEST['output'] : null;
-}
-
-function crmBlueprintExporterRespond(array $payload, int $statusCode = 200): void
-{
-    if (PHP_SAPI !== 'cli' && !headers_sent())
-    {
-        http_response_code($statusCode);
-        header('Content-Type: application/json; charset=UTF-8');
-    }
-
-    echo json_encode(
-        $payload,
-        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT | JSON_INVALID_UTF8_SUBSTITUTE
-    );
-}
-
-try
-{
-    $documentRoot = crmBlueprintExporterFindDocumentRoot();
-    if ($documentRoot === null)
-    {
-        throw new RuntimeException('Не найден /bitrix/modules/main/include/prolog_before.php. Скрипт должен запускаться внутри коробочного Битрикс24.');
-    }
-
-    $_SERVER['DOCUMENT_ROOT'] = $documentRoot;
-    require_once $documentRoot . '/bitrix/modules/main/include/prolog_before.php';
-
-    $exporter = new CrmPortalBlueprintExporter();
-    $result = $exporter->export(crmBlueprintExporterResolveRequestedOutputPath());
-    crmBlueprintExporterRespond($result);
-}
-catch (\Throwable $e)
-{
-    crmBlueprintExporterRespond([
-        'success' => false,
-        'error' => $e->getMessage(),
-        'file' => $e->getFile(),
-        'line' => $e->getLine(),
-    ], 500);
 }

@@ -1,88 +1,62 @@
-# Экспорт шаблона CRM-портала Bitrix24
+# Модуль тиражирования CRM Bitrix24
 
-Файл [bitrix24_crm_blueprint_export.php](/Users/yi/bufer/module.move.bx/bitrix24_crm_blueprint_export.php) выгружает в JSON:
+В каталоге [yi.crmblueprint](/Users/yi/bufer/module.move.bx/yi.crmblueprint) лежит готовый модуль для коробочного Bitrix24.
 
-- воронки и стадии сделок;
-- статусы лидов;
-- цвета стадий и статусов;
-- шаблоны бизнес-процессов;
-- роботов и триггеры CRM;
-- пользовательские поля лидов, сделок, контактов и компаний;
-- настройки пользовательских полей и значения полей типа `Список`.
+## Что делает модуль
 
-## Как запускать
+- снимает текущий слепок CRM-настроек в JSON;
+- умеет по URL скачать JSON-конфиг с другого портала;
+- выполняет тестовый импорт `dry-run`;
+- выполняет боевой импорт `apply`;
+- сохраняет ссылки на экспортные JSON и на логи импорта;
+- работает с пользовательскими полями, стадиями, статусами, шаблонами БП, роботами и триггерами;
+- переносит CRM-справочники:
+- тип контакта;
+- тип компании;
+- количество сотрудников;
+- сфера деятельности;
+- тип сделки;
+- источники.
 
-Вариант 1, через браузер под администратором портала:
+Если при импорте `FIELD_NAME` уже занят, модуль создает новое поле с суффиксом `_X1`, `_X2` и старается автоматически подменить это имя в БП, роботах и триггерах.
 
-```text
-https://your-portal.local/local/tools/bitrix24_crm_blueprint_export.php
-```
+## Установка
 
-Вариант 2, с указанием своего пути для JSON:
+1. Скопировать папку `yi.crmblueprint` в `local/modules/` портала.
+2. В админке Bitrix открыть список модулей.
+3. Установить модуль `YI: Тиражирование CRM Bitrix24`.
+4. Открыть страницу настроек модуля.
 
-```text
-https://your-portal.local/local/tools/bitrix24_crm_blueprint_export.php?output=/upload/crm_blueprints/my-export.json
-```
+## Как пользоваться
 
-Вариант 3, через CLI внутри портала:
+На портале-источнике:
 
-```bash
-php /home/bitrix/www/local/tools/bitrix24_crm_blueprint_export.php --output=/home/bitrix/www/upload/crm_blueprints/my-export.json
-```
+1. Установить модуль.
+2. В настройках нажать `Получить текущий слепок`.
+3. Открыть ссылку на созданный JSON-файл.
 
-Если путь не передан, файл будет создан автоматически в каталоге `/upload/crm_blueprints/`.
+На целевом портале:
 
-## Что важно
+1. Установить тот же модуль.
+2. Вставить URL JSON-файла в поле настроек.
+3. Нажать `Проверить импорт (dry-run)`.
+4. Посмотреть сводку и лог импорта.
+5. Если всё корректно, нажать `Загрузить конфиг в портал`.
 
-- скрипт рассчитан на коробочный Битрикс24;
-- запускать лучше под администратором;
-- структура JSON сделана так, чтобы потом можно было строить отдельный импортёр под тиражирование порталов.
+## Где лежат файлы
 
-## Импорт
-
-Файл [bitrix24_crm_blueprint_import.php](/Users/yi/bufer/module.move.bx/bitrix24_crm_blueprint_import.php) разворачивает новый портал из ранее сохраненного JSON.
-
-Что делает импортёр:
-
-- создает или обновляет направления сделок;
-- создает или обновляет стадии и статусы;
-- создает пользовательские поля;
-- при конфликте `FIELD_NAME` создает новое поле с суффиксом вида `_X1`, `_X2` и подменяет ссылки на это поле в шаблонах БП, роботах и триггерах;
-- пытается сохранить исходные ID значений списков, чтобы снизить риск поломки БП;
-- импортирует шаблоны бизнес-процессов;
-- импортирует роботов и триггеры.
-
-### Как запускать импорт
-
-Сначала безопасная проверка без записи в портал:
-
-```bash
-php /home/bitrix/www/local/tools/bitrix24_crm_blueprint_import.php --input=/home/bitrix/www/upload/crm_blueprints/my-export.json --mode=dry-run
-```
-
-Реальный импорт:
-
-```bash
-php /home/bitrix/www/local/tools/bitrix24_crm_blueprint_import.php --input=/home/bitrix/www/upload/crm_blueprints/my-export.json --mode=apply
-```
-
-Через браузер:
+Модуль складывает артефакты в каталог:
 
 ```text
-https://your-portal.local/local/tools/bitrix24_crm_blueprint_import.php?input=/upload/crm_blueprints/my-export.json&mode=dry-run
-https://your-portal.local/local/tools/bitrix24_crm_blueprint_import.php?input=/upload/crm_blueprints/my-export.json&mode=apply
+/upload/yi.crmblueprint/
 ```
 
-После запуска создается JSON-отчет в `/upload/crm_blueprints/`:
+Там будут появляться:
 
-- созданных и обновленных полей;
-- коллизий `FIELD_NAME`;
-- подмен имен полей;
-- подмен стадий;
-- предупреждений по значениям списков;
-- результатов импорта БП и автоматизации.
+- `exports/` — выгруженные слепки портала;
+- `sources/` — JSON-файлы, скачанные по URL перед импортом;
+- `reports/` — логи `dry-run` и `apply`.
 
-### Практические замечания
+## Что осталось в репозитории
 
-- сначала лучше всегда запускать `dry-run`;
-- импортёр рассчитан прежде всего на новые или почти пустые порталы;
+Файлы [bitrix24_crm_blueprint_export.php](/Users/yi/bufer/module.move.bx/bitrix24_crm_blueprint_export.php) и [bitrix24_crm_blueprint_import.php](/Users/yi/bufer/module.move.bx/bitrix24_crm_blueprint_import.php) оставлены как исходная standalone-версия логики, на базе которой собран модуль.

@@ -1,0 +1,30 @@
+<?php
+
+$MESS['MOVEBX_CRM_BLUEPRINT_OPTIONS_TITLE'] = 'Тиражирование CRM Bitrix24';
+$MESS['MOVEBX_CRM_BLUEPRINT_TAB_MAIN'] = 'Управление конфигом';
+$MESS['MOVEBX_CRM_BLUEPRINT_TAB_MAIN_TITLE'] = 'Экспорт и импорт конфигурации CRM';
+$MESS['MOVEBX_CRM_BLUEPRINT_SOURCE_URL'] = 'URL JSON-конфига';
+$MESS['MOVEBX_CRM_BLUEPRINT_REPLACE_AUTOMATION'] = 'Перед импортом очищать текущих роботов и триггеры сущности';
+$MESS['MOVEBX_CRM_BLUEPRINT_EXPORT_BUTTON'] = 'Получить текущий слепок';
+$MESS['MOVEBX_CRM_BLUEPRINT_IMPORT_DRY_BUTTON'] = 'Проверить импорт (dry-run)';
+$MESS['MOVEBX_CRM_BLUEPRINT_IMPORT_APPLY_BUTTON'] = 'Загрузить конфиг в портал';
+$MESS['MOVEBX_CRM_BLUEPRINT_SECTION_EXPORT'] = 'Экспорт текущего состояния';
+$MESS['MOVEBX_CRM_BLUEPRINT_SECTION_IMPORT'] = 'Импорт по ссылке на JSON';
+$MESS['MOVEBX_CRM_BLUEPRINT_LAST_EXPORT'] = 'Последний экспорт';
+$MESS['MOVEBX_CRM_BLUEPRINT_LAST_IMPORT'] = 'Последний импорт';
+$MESS['MOVEBX_CRM_BLUEPRINT_FILE_LINK'] = 'Открыть файл';
+$MESS['MOVEBX_CRM_BLUEPRINT_REPORT_LINK'] = 'Открыть лог';
+$MESS['MOVEBX_CRM_BLUEPRINT_SOURCE_LINK'] = 'Открыть скачанный JSON';
+$MESS['MOVEBX_CRM_BLUEPRINT_SUMMARY'] = 'Сводка';
+$MESS['MOVEBX_CRM_BLUEPRINT_SUMMARY_WARNINGS'] = 'Предупреждений';
+$MESS['MOVEBX_CRM_BLUEPRINT_SUMMARY_ERRORS'] = 'Ошибок';
+$MESS['MOVEBX_CRM_BLUEPRINT_SUMMARY_FIELD_COLLISIONS'] = 'Коллизий FIELD_NAME';
+$MESS['MOVEBX_CRM_BLUEPRINT_SUMMARY_BP_CREATED'] = 'Шаблонов БП к созданию/создано';
+$MESS['MOVEBX_CRM_BLUEPRINT_SUMMARY_BP_UPDATED'] = 'Шаблонов БП к обновлению/обновлено';
+$MESS['MOVEBX_CRM_BLUEPRINT_SUMMARY_FIELDS_CREATED'] = 'Полей к созданию/создано';
+$MESS['MOVEBX_CRM_BLUEPRINT_SUMMARY_FIELDS_UPDATED'] = 'Полей к обновлению/обновлено';
+$MESS['MOVEBX_CRM_BLUEPRINT_RESULT_EXPORT_OK'] = 'Экспорт завершен.';
+$MESS['MOVEBX_CRM_BLUEPRINT_RESULT_IMPORT_OK'] = 'Операция импорта завершена.';
+$MESS['MOVEBX_CRM_BLUEPRINT_RESULT_IMPORT_FAIL'] = 'Во время импорта возникли ошибки.';
+$MESS['MOVEBX_CRM_BLUEPRINT_ERROR_NO_URL'] = 'Нужно указать URL JSON-конфига.';
+$MESS['MOVEBX_CRM_BLUEPRINT_NOTE'] = 'Обычно сценарий такой: на портале-источнике выполняется экспорт, затем URL JSON вставляется на чистом портале и сначала прогоняется dry-run, после чего запускается боевой импорт.';
