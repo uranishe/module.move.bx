@@ -273,6 +273,12 @@ final class CrmPortalBlueprintImporter
     {
         $existing = $this->getStatusesByEntityId($entityId);
 
+        if ($this->isApplyMode())
+        {
+            $this->deleteStatusEntityRows($entityId);
+            $existing = [];
+        }
+
         foreach ($items as $item)
         {
             if (!is_array($item))
@@ -294,15 +300,8 @@ final class CrmPortalBlueprintImporter
 
             if ($this->isApplyMode())
             {
-                if ($action === 'update')
-                {
-                    $this->updateRow('b_crm_status', (int)$existing[$statusId]['ID'], $payload);
-                }
-                else
-                {
-                    $newId = $this->insertRow('b_crm_status', $payload);
-                    $existing[$statusId] = ['ID' => $newId] + $payload;
-                }
+                $newId = $this->insertRow('b_crm_status', $payload);
+                $existing[$statusId] = ['ID' => $newId] + $payload;
             }
 
             $this->report['dictionaries'][$dictionaryCode][$action === 'update' ? 'updated' : 'created'][] = [
@@ -533,6 +532,12 @@ final class CrmPortalBlueprintImporter
         $sourceCategoryId = $sourceCategoryId ?? $targetCategoryId;
         $existing = $this->getStatusesByEntityId($targetStatusEntityId);
 
+        if ($this->isApplyMode())
+        {
+            $this->deleteStatusEntityRows($targetStatusEntityId);
+            $existing = [];
+        }
+
         foreach ($statuses as $status)
         {
             if (!is_array($status))
@@ -554,15 +559,8 @@ final class CrmPortalBlueprintImporter
 
             if ($this->isApplyMode())
             {
-                if ($action === 'update')
-                {
-                    $this->updateRow('b_crm_status', (int)$existing[$targetStatusId]['ID'], $payload);
-                }
-                else
-                {
-                    $newId = $this->insertRow('b_crm_status', $payload);
-                    $existing[$targetStatusId] = ['ID' => $newId] + $payload;
-                }
+                $newId = $this->insertRow('b_crm_status', $payload);
+                $existing[$targetStatusId] = ['ID' => $newId] + $payload;
             }
 
             $this->report['entities'][$entityCode]['funnels'][] = [
@@ -1344,6 +1342,12 @@ final class CrmPortalBlueprintImporter
     {
         $connection = Application::getConnection();
         $connection->queryExecute('DELETE FROM ' . $tableName . ' WHERE ' . $whereSql);
+    }
+
+    private function deleteStatusEntityRows(string $entityId): void
+    {
+        $helper = Application::getConnection()->getSqlHelper();
+        $this->deleteByFilter('b_crm_status', "ENTITY_ID = '" . $helper->forSql($entityId) . "'");
     }
 
     private function getApplicationExceptionText(): string
