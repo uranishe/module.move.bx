@@ -9,7 +9,7 @@ use Bitrix\Main\Loader;
 
 final class BlueprintExporter
 {
-    private const SCHEMA_VERSION = '1.0.0';
+    private const SCHEMA_VERSION = '1.0.1';
 
     private const ENTITY_MAP = [
         'lead' => [
